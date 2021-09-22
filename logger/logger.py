@@ -22,7 +22,7 @@ from pathlib import Path
 logger = logging.getLogger('IVS_OC_QC')
 
 
-def initialize_logging(severity_console="INFO", severity_file="DEBUG", outdir="data/IVS_OC_QC_LOGS", mode='w'):
+def initialize_logging(severity_console="INFO", severity_file="DEBUG", outdir="../IVS_OC_QC_LOGS", mode='w'):
     """
     initialize logging environment
 

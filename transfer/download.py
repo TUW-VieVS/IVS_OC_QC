@@ -18,8 +18,13 @@
 import datetime
 from pathlib import Path
 
+import requests
+from ftplib import FTP, FTP_TLS
+from ftplib import all_errors as ftp_errors
+
 from logger import logger
-from transfer import https
+from transfer import https, ftp
+from data.util import code2program
 
 
 def master(path):
@@ -27,41 +32,130 @@ def master(path):
     path = Path(path)
 
     year = datetime.date.today().year
+    try:
+        ftp_server = FTP_TLS(host='gdc.cddis.eosdis.nasa.gov')
+        ftp_server.login(user='anonymous', passwd='')
+        ftp_server.prot_p()
+        ftp_server.cwd('/vlbi/ivscontrol/')
+    except ftp_errors as e:
+        logger.error(f"error connecting to gdc.cddis.eosdis.nasa.gov: {e}")
+        return
 
-    successful = 0
-    error = 0
+    successful, error, skipped = 0, 0, 0
 
-    def download_(file, dest):
-        nonlocal successful, error
-        if https.https_download(f"https://cddis.nasa.gov/archive/vlbi/ivscontrol/{file}", dest):
-            error += 1
+    def download_(f, force=False):
+        nonlocal successful, error, skipped
+        dest = (path / f)
+        if force or not dest.is_file():
+            if ftp.ftp_download(ftp_server, f, dest):
+                error += 1
+            else:
+                successful += 1
         else:
-            successful += 1
+            skipped += 1
 
     # download past data in case it is missing
     for i in range(1979, year):
         file = f"master{i % 100:02d}.txt"
-        dest = (path / file)
-        if not dest.is_file():
-            download_(file, dest)
+        download_(file)
     for i in range(1992, year):
         file = f"master{i % 100:02d}-int.txt"
-        dest = (path / file)
-        if not dest.is_file():
-            download_(file, dest)
+        download_(file)
     for i in [2013, *range(2015, 2020)]:
         file = f"master{i % 100:02d}-vgos.txt"
-        dest = (path / file)
-        if not dest.is_file():
-            download_(file, dest)
+        download_(file)
 
     # always download data from this year
     file = f"master{year % 100}.txt"
-    dest = (path / file)
-    download_(file, dest)
+    download_(file, True)
 
     file = f"master{year % 100}-int.txt"
-    dest = (path / file)
-    download_(file, dest)
+    download_(file, True)
 
-    logger.info(f"successfully downloaded {successful} files, {error} errors")
+    logger.info(f"successfully downloaded {successful} files, {error} errors, {skipped} skipped")
+
+
+def download_cddis(path, year=None):
+    logger.info("start downloading files from CDDIS")
+    if year is None:
+        year = datetime.date.today().year
+        # download_cddis(path, year-1)
+    path = Path(path)
+
+    successful, error, skipped = 0, 0, 0
+
+    def download_(f, dest, force=False):
+        nonlocal successful, error, skipped
+        if force or not dest.is_file():
+            if ftp.ftp_download(ftp_server, f, dest):
+                error += 1
+            else:
+                successful += 1
+        else:
+            skipped += 1
+
+    try:
+        # connect to FTP server
+        ftp_server = FTP_TLS(host='gdc.cddis.eosdis.nasa.gov')
+        ftp_server.login(user='anonymous', passwd='')
+        ftp_server.prot_p()
+        ftp_server.cwd(f'/vlbi/ivsdata/aux/{year}')
+
+        # get a list of all files at FTP server
+        ftp_dirs = ftp_server.nlst()
+        for dir in ftp_dirs:
+            ftp_server.cwd(f"/vlbi/ivsdata/aux/{year}/{dir}")
+            ftp_files = ftp_server.nlst()
+
+            for file in ftp_files:
+                if file.endswith(".skd") or "spool" in file:
+                    out = path / code2program(dir, year) / dir / file
+                    download_(file, out)
+
+        logger.info(f"successfully downloaded {successful} files, {error} errors, {skipped} skipped")
+
+    except ftp_errors as e:
+        logger.error(f"error connecting to gdc.cddis.eosdis.nasa.gov: {e}")
+
+
+def download_bkg(path, year=None):
+    logger.info("start downloading files from BKG")
+    if year is None:
+        year = datetime.date.today().year
+        # download_bkg(path, year-1)
+    path = Path(path)
+
+    successful, error, skipped = 0, 0, 0
+
+    def download_(f, dest, force=False):
+        nonlocal successful, error, skipped
+        if force or not dest.is_file():
+            if ftp.ftp_download(ftp_server, f, dest):
+                error += 1
+            else:
+                successful += 1
+        else:
+            skipped += 1
+
+    try:
+        # connect to FTP server
+        ftp_server = FTP("ivs.bkg.bund.de")
+        ftp_server.login()
+        ftp_server.cwd(f"/pub/vlbi/ivsdata/aux/{year}/")
+
+        # get a list of all files at FTP server
+        ftp_dirs = ftp_server.nlst()
+        for dir in ftp_dirs:
+            ftp_server.cwd(f"/pub/vlbi/ivsdata/aux/{year}/{dir}")
+            ftp_files = ftp_server.nlst()
+
+            for file in ftp_files:
+                if file.endswith(".skd") or "spool" in file:
+                    out = path / code2program(dir, year) / dir / file
+                    download_(file, out)
+
+        logger.info(f"successfully downloaded {successful} files, {error} errors, {skipped} skipped")
+
+    except ftp_errors as e:
+        logger.error(f"error connecting to ivs.bkg.bund.de: {e}")
+

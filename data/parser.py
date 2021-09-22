@@ -14,31 +14,21 @@
 #  You should have received a copy of the GNU General Public License           #
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.      #
 # ##############################################################################
-import argparse
-import configparser
 
-import transfer.download as download
-from logger.logger import initialize_logging
+import re
 
+import pandas as pd
 
-def start_download():
-    download.master(settings["data"].get("master", "data/MASTER"))
-    download.download_cddis(settings["data"].get("observing_programs", "data/OP"))
-    download.download_bkg(settings["data"].get("observing_programs", "data/OP"))
+def read_master(file):
+    pattern = re.compile(r'^\|([\w-]+)\s*\|([\w-]+)\s*\|')
 
-
-if __name__ == "__main__":
-    doc = "=== IVS Operation Center Quality Control === \n" \
-          "Some scripts to automatically download and evaluate IVS observing programs."
-
-    parser = argparse.ArgumentParser(description=doc)
-    parser.add_argument("-i", "--ini", help="path to .ini file", default="settings.ini")
-    parser.add_argument("-nd", "--no_download", action="store_true", help="do not download new data")
-    args = parser.parse_args()
-
-    settings = configparser.ConfigParser()
-    settings.read(args.ini)
-
-    initialize_logging()
-
-    start_download()
+    df_master = pd.DataFrame(None, None, ["name","code"], dtype=str)
+    with open(file,'r') as f:
+        for l in f:
+            match = pattern.search(l)
+            if match:
+                op = match.group(1)
+                code = match.group(2).lower()
+                s = pd.Series([op, code], index=["name","code"], dtype=str)
+                df_master = df_master.append(s, ignore_index=True)
+    return df_master.astype(str)
