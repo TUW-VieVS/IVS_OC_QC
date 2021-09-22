@@ -31,45 +31,37 @@ def master(path):
     successful = 0
     error = 0
 
+    def download_(file, dest):
+        nonlocal successful, error
+        if https.https_download(f"https://cddis.nasa.gov/archive/vlbi/ivscontrol/{file}", dest):
+            error += 1
+        else:
+            successful += 1
+
     # download past data in case it is missing
     for i in range(1979, year):
         file = f"master{i % 100:02d}.txt"
         dest = (path / file)
         if not dest.is_file():
-            if https.https_download(f"https://cddis.nasa.gov/archive/vlbi/ivscontrol/{file}", dest):
-                error += 1
-            else:
-                successful += 1
+            download_(file, dest)
     for i in range(1992, year):
         file = f"master{i % 100:02d}-int.txt"
         dest = (path / file)
         if not dest.is_file():
-            if https.https_download(f"https://cddis.nasa.gov/archive/vlbi/ivscontrol/{file}", dest):
-                error += 1
-            else:
-                successful += 1
+            download_(file, dest)
     for i in [2013, *range(2015, 2020)]:
         file = f"master{i % 100:02d}-vgos.txt"
         dest = (path / file)
         if not dest.is_file():
-            if https.https_download(f"https://cddis.nasa.gov/archive/vlbi/ivscontrol/{file}", dest):
-                error += 1
-            else:
-                successful += 1
+            download_(file, dest)
 
     # always download data from this year
     file = f"master{year % 100}.txt"
     dest = (path / file)
-    if https.https_download(f"https://cddis.nasa.gov/archive/vlbi/ivscontrol/{file}", dest):
-        error += 1
-    else:
-        successful += 1
+    download_(file, dest)
 
     file = f"master{year % 100}-int.txt"
     dest = (path / file)
-    if https.https_download(f"https://cddis.nasa.gov/archive/vlbi/ivscontrol/{file}", dest):
-        error += 1
-    else:
-        successful += 1
+    download_(file, dest)
 
     logger.info(f"successfully downloaded {successful} files, {error} errors")
